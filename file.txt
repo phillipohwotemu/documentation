@@ -1,0 +1,242 @@
+CICD/PIPELINE :Github-jenkins-maven=sonar-nexus-tomcat
+
+Spin up ec2 server for the application
+install 
+jenkins
+maven 
+sonar
+nexus
+tomcat 
+all separate machines
+
+Install Jenkins
+
+ sudo apt-get update
+ sudo apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+ echo \
+  "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+ sudo apt-get update
+ sudo apt-get install docker-ce docker-ce-cli containerd.io
+ sudo usermod -aG docker $USER
+And now you can install Docker Compose :
+
+ sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+ sudo chmod +x /usr/local/bin/docker-compose
+Nano docker-compose.yml. and add the file below
+
+version: '3.7'
+services:
+  jenkins:
+    image: jenkins/jenkins:lts
+    privileged: true
+    user: root
+    ports:
+      - 8080:8080
+      - 50000:50000
+    container_name: jenkins-lts
+    volumes:
+      - ~/jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/local/bin/docker:/usr/local/bin/docker
+Save and then run docker-compose up -d
+to get Jenkins password run:docker exec jenkins-lts cat /var/jenkins_home/secrets/initialAdminPassword
+Install Maven :
+
+sudo wget http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
+sudo sed -i s/\$releasever/6/g /etc/yum.repos.d/epel-apache-maven.repo
+sudo yum install -y apache-maven
+mvn –version
+ 
+Install Sonarqube:
+
+$> sudo apt-get update
+$> sudo apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+$> curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+$> echo \
+  "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+$> sudo apt-get update
+$> sudo apt-get install docker-ce docker-ce-cli containerd.io
+$> sudo groupadd docker
+$> sudo usermod -aG docker $USER
+Logout and Login again to your server, you should be able to run
+
+$> docker run hello-world
+And now you can install Docker Compose :
+
+$> sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+$> sudo chmod +x /usr/local/bin/docker-compose
+🏵️ Adjust OS settings
+
+SonarQube has some hardware requirements : you should increase the values for those 2 OS settings :
+
+fs.file-max: “The value in file-max denotes the maximum number of file- handles that the Linux kernel will allocate. When you get lots of error messages about running out of file handles, you might want to increase this limit.”
+vm.max_map_count: “the maximum number of memory map areas a process may have. Memory map areas are used as a side-effect of calling malloc, directly by mmap and mprotect, and also when loading shared libraries.”
+You should modifiy as root user the /etc/sysctl.conf file to set permanently the values for these 2 parameters :
+
+$> sudo nano /etc/sysctl.conf
+Then add this content to the file :
+
+# can be added at the end of the file
+fs.file-max=131072
+vm.max_map_count=524288
+Save, close, and then reload the settings :
+
+$> sudo sysctl --system
+🚀 Run SonarQube
+
+Set the following docker-compose.yml file to run both SonarQube and PostgreSQL 12 containers : sudo nano docker-compose.yml and past the following
+
+version: "3"
+
+services:
+  sonarqube:
+    image: sonarqube:8.9.2-community
+    depends_on:
+      - db
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar #tochange
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    ports:
+      - "9000:9000"
+  db:
+    image: postgres:12
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar #tochange
+    volumes:
+      - postgresql:/var/lib/postgresql
+      - postgresql_data:/var/lib/postgresql/data
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  postgresql:
+  postgresql_data:
+It would be best if you changed the default password.
+
+You’re now ready to run your SonarQube 🚀
+
+$> docker-compose up -d
+You can check the evolution of the logs using docker-compose logs -f command. SonarQube is ready when the following logs are displayed :
+
+$> docker-compose logs -f
+...
+sonarqube_1  | 2021.08.02 07:05:05 INFO  ce[][o.s.ce.app.CeServer] Compute Engine is operational
+sonarqube_1  | 2021.08.02 07:05:05 INFO  app[][o.s.a.SchedulerImpl] Process[ce] is up
+sonarqube_1  | 2021.08.02 07:05:05 INFO  app[][o.s.a.SchedulerImpl] SonarQube is up
+Wait a little bit and you should get the following screen on http://localhost:9000 :
+
+
+
+INSTALL NEXUS
+
+update server
+
+sudo apt-get install docker-compose -y
+
+sudo usermod -aG docker $USER
+
+sudo vi docker-compose.yml 
+
+version: "3"
+services:
+  nexus:
+    image: sonatype/nexus3
+    restart: always
+    volumes:
+      - "nexus-data:/sonatype-work"
+    ports:
+      - "8081:8081"
+      - "8085:8085"
+
+volumes:
+  nexus-data: {}
+
+sudo docker-compose up -d 
+
+sudo docker-compose logs —follow
+
+default user is admin, to get password: sudo docker exec -t ubuntu_nexus_1  cat /nexus-data/admin.password
+
+INSTALL TOMCAT
+
+Update server
+sudo apt install openjdk-11-jdk
+sudo apt-cache search tomcat
+sudo apt install tomcat9 tomcat9-admin
+ss -ltn
+sudo ufw allow from any to any port 8080 proto tcp
+sudo nano /etc/tomcat9/tomcat-users.xml
+Paste the following at the bottom
+<role rolename="admin-gui"/>
+<role rolename="manager-gui"/gt;
+<user username="tomcat" password="pass" roles="admin-gui,manager-gui"/>
+sudo systemctl restart tomcat9
+
+enter your ip details: http://127.0.0.1:8080/manager/html
+
+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
+
+
+
+
+
+pipeline {
+
+    agent any
+
+    environment {
+
+        PATH = "/opt/apache-maven-3.6.3/bin:$PASH"
+
+    }
+
+    stages {
+
+        stage('git-clone') {
+
+            steps {
+
+                git branch: 'main', url: 'https://github.com/phillipohwotemu/maven-kub.git'
+
+            }
+
+        }
+
+        stage('build') {
+
+            steps {
+
+              sh "mvn clean install"
+
+            }
+
+        }
+
+    }
+
+}
+
+
+
+
+
